@@ -2,15 +2,15 @@
 //
 //
 
-var request = require("request"),
-    cheerio = require('cheerio'),
-    archiver = require('archiver'),
-    mkdirp = require('mkdirp'),
-    async = require('async'),
-    rmdir = require('rmdir'),
-    fs = require('fs');
+const request = require("request");
+const cheerio = require('cheerio');
+const archiver = require('archiver');
+const mkdirp = require('mkdirp');
+const async = require('async');
+const rmdir = require('rmdir');
+const fs = require('fs');
 
-var workdir = './getImg_';
+const workdir = './getImg_';
 
 function output_message( err ) {
   if (err) {
@@ -140,23 +140,42 @@ function Imgcallback(err, id, title, urls) {
     },
     // ダウンロードイメージの圧縮
     function(next) {
-      var archive = archiver.create( 'zip', {});
-      var output = fs.createWriteStream( title + '.zip' );
-      archive.pipe(output);
-      archive.bulk([
-        {
-          expand:true,
-          cwd:dir,
-          src:['**/*'],
-          dest:'/',
-          dot:true
+      const run_archive = function( dir, file, next_p ) {
+        var archive = archiver.create( 'zip', {});
+        var output = fs.createWriteStream( file );
+        archive.pipe(output);
+        archive.bulk([
+          {
+            expand:true,
+            cwd:dir,
+            src:['**/*'],
+            dest:'/',
+            dot:true
+          }
+        ]);
+        output.on('close', function() {
+          next_p();
+        });
+        // ZIP圧縮実行
+        archive.finalize();
+      };
+
+      // アーカイブファイルが存在しているかどうかの確認
+      fs.open( title + '.zip', 'ax+', 420 /* =0644 */, function( err, fd) {
+        if (err) {
+          if (err.code === 'EEXIST') {
+            // 存在している場合、ファイル名にidを付与
+            run_archive( dir, title + '_' + id + '.zip', next );
+          } else {
+            next();
+          }
+        } else {
+          // ファイルがオープンできれば、オープンできたファイル名でアーカイブを作成
+          fs.close(fd, function(err) {
+            run_archive( dir, title + '.zip', next );
+          });
         }
-      ]);
-      output.on('close', function() {
-        next();
       });
-      // ZIP圧縮実行
-      archive.finalize();
     },
     // ワークディレクトリの削除
     function(next) {
@@ -172,8 +191,8 @@ function Imgcallback(err, id, title, urls) {
 //
 
 var argv = process.argv;
-var cmd = argv.shift();
-var script = argv.shift();
+const cmd = argv.shift();
+const script = argv.shift();
 
 async.eachSeries( argv, function( arg, callback ) {
   getImageList( arg, Imgcallback );
